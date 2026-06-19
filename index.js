@@ -35,9 +35,14 @@ if (fs.existsSync(eventsPath)) {
   }
 }
 
-client.once('ready', () => {
-  console.log('Helper bot ready!');
-  startStatusUpdater(client, redis);
+client.once('ready', async () => {
+  console.log(`${client.user.tag} online`);
+
+  // ---- HEARTBEAT – tells helper we're alive ----
+  await redis.set('bot:heartbeat', Date.now());
+  setInterval(async () => {
+    await redis.set('bot:heartbeat', Date.now());
+  }, 60000); // every minute
 });
 
 client.login(token);
