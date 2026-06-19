@@ -1,6 +1,7 @@
-// events/messageCreate.js – Helper bot dev commands (prefix $) + generatecode
+// events/messageCreate.js – FULL WITH STATUS CHANNEL AND MAINTENANCE
 const { Events, EmbedBuilder } = require("discord.js");
 const { devId } = require("../config");
+const { updateStatusChannel } = require("../utils/status");
 
 function durationToSeconds(input) {
   if (input === "perm") return -1;
@@ -30,13 +31,8 @@ module.exports = {
       return message.reply("❌ You are not authorized to use this bot.");
     }
 
-    // ---- GENERATE CODE (premium redeem codes) ----
+    // ---- GENERATE CODE ----
     if (cmd === "generatecode") {
-      // Usage: $generatecode <code> <duration> <uses> [type] [coinAmount]
-      // Example: $generatecode TEST 1h 5 user 100
-      // type: user or guild (default user)
-      // coinAmount: optional, defaults to 0
-
       const code = args[0]?.toUpperCase();
       const duration = args[1];
       const uses = parseInt(args[2]);
@@ -44,25 +40,18 @@ module.exports = {
       const coinAmount = parseInt(args[4]) || 0;
 
       if (!code || !duration || isNaN(uses) || uses < 1) {
-        return message.reply("❌ Usage: `$generatecode <code> <duration> <uses> [type] [coinAmount]`\nExample: `$generatecode TEST 1h 5 user 100`");
+        return message.reply("❌ Usage: `$generatecode <code> <duration> <uses> [type] [coinAmount]`");
       }
-
       if (!['user', 'guild'].includes(type)) {
         return message.reply("❌ Type must be `user` or `guild`.");
       }
-
       const seconds = durationToSeconds(duration);
       if (seconds === 0 && duration !== "perm") {
         return message.reply("❌ Invalid duration. Use `1h`, `2d`, `30m`, or `perm`.");
       }
-
-      // Check if code already exists
       const existing = await redis.get(`redeem:${code}`);
-      if (existing) {
-        return message.reply(`❌ Code **${code}** already exists.`);
-      }
+      if (existing) return message.reply(`❌ Code **${code}** already exists.`);
 
-      // Build data
       const data = {
         code,
         duration,
@@ -93,6 +82,44 @@ module.exports = {
         .setTimestamp();
 
       return message.reply({ embeds: [embed] });
+    }
+
+    // ---- STATUS CHANNEL ----
+    if (cmd === "statuschannel") {
+      const action = args[0]?.toLowerCase();
+      const channel = message.mentions.channels.first();
+
+      if (action === "setup") {
+        if (!channel) return message.reply("❌ Usage: `$statuschannel setup #channel` (voice or text)");
+        await redis.set(`status:channel:${guildId}`, channel.id);
+        await redis.set(`status:baseName:${guildId}`, "Bot Status");
+        await updateStatusChannel(guildId, client, redis);
+        return message.reply(`✅ Status channel set to ${channel}. I'll keep it updated.`);
+      } else if (action === "remove") {
+        await redis.del(`status:channel:${guildId}`);
+        await redis.del(`status:baseName:${guildId}`);
+        return message.reply("✅ Status channel removed.");
+      } else {
+        return message.reply("❌ Usage: `$statuschannel setup #channel` or `$statuschannel remove`");
+      }
+    }
+
+    // ---- MAINTENANCE MODE ----
+    if (cmd === "maintenance") {
+      const mode = args[0]?.toLowerCase();
+      if (!mode || !["on", "off"].includes(mode)) {
+        return message.reply("❌ Usage: `$maintenance on` or `$maintenance off`");
+      }
+      const maintenanceKey = `maintenance:${guildId}`;
+      if (mode === "on") {
+        await redis.set(maintenanceKey, "true");
+        await updateStatusChannel(guildId, client, redis);
+        return message.reply("🔧 Maintenance mode **enabled**. The main bot will respond with a maintenance message.");
+      } else {
+        await redis.del(maintenanceKey);
+        await updateStatusChannel(guildId, client, redis);
+        return message.reply("✅ Maintenance mode **disabled**. The main bot is back to normal.");
+      }
     }
 
     // ---- ECONOMY ----
@@ -236,17 +263,10 @@ module.exports = {
         const seconds = durationToSeconds(duration);
         if (seconds === 0 && duration !== "perm") return message.reply("❌ Invalid duration.");
         const key = `blacklist:${targetType}:${targetId}`;
-        const data = {
-          reason: reason,
-          createdAt: Date.now()
-        };
-        if (seconds !== -1) {
-          data.expiresAt = Date.now() + seconds * 1000;
-        }
+        const data = { reason: reason, createdAt: Date.now() };
+        if (seconds !== -1) data.expiresAt = Date.now() + seconds * 1000;
         await redis.set(key, JSON.stringify(data));
-        if (seconds !== -1) {
-          await redis.expire(key, seconds);
-        }
+        if (seconds !== -1) await redis.expire(key, seconds);
         return message.reply(`✅ Blacklisted **${targetType}** \`${targetId}\` until ${duration}. Reason: ${reason}`);
       } else if (action === "remove") {
         const key = `blacklist:${targetType}:${targetId}`;
@@ -322,6 +342,14 @@ module.exports = {
           ].join("\n"), inline: false },
           { name: "🎟️ Redeem Codes", value: [
             "`$generatecode <code> <duration> <uses> [type] [coinAmount]`"
+          ].join("\n"), inline: false },
+          { name: "📊 Status Channel", value: [
+            "`$statuschannel setup #channel`",
+            "`$statuschannel remove`"
+          ].join("\n"), inline: false },
+          { name: "🔧 Maintenance", value: [
+            "`$maintenance on`",
+            "`$maintenance off`"
           ].join("\n"), inline: false }
         )
         .setTimestamp();
