@@ -1,7 +1,8 @@
-
+// index.js – Helper Bot
 const { Client, GatewayIntentBits, Partials } = require("discord.js");
 const { token } = require("./config");
 const redis = require("./redis");
+const { startStatusUpdater } = require("./utils/status");
 
 const client = new Client({
   intents: [
@@ -33,5 +34,10 @@ if (fs.existsSync(eventsPath)) {
     }
   }
 }
+
+client.once('ready', () => {
+  console.log('Helper bot ready!');
+  startStatusUpdater(client, redis);
+});
 
 client.login(token);
