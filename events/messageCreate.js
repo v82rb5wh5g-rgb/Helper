@@ -1,4 +1,4 @@
-// events/messageCreate.js – Helper bot dev commands (prefix $)
+// events/messageCreate.js – Helper bot dev commands (prefix $) + generatecode
 const { Events, EmbedBuilder } = require("discord.js");
 const { devId } = require("../config");
 
@@ -28,6 +28,71 @@ module.exports = {
 
     if (userId !== devId) {
       return message.reply("❌ You are not authorized to use this bot.");
+    }
+
+    // ---- GENERATE CODE (premium redeem codes) ----
+    if (cmd === "generatecode") {
+      // Usage: $generatecode <code> <duration> <uses> [type] [coinAmount]
+      // Example: $generatecode TEST 1h 5 user 100
+      // type: user or guild (default user)
+      // coinAmount: optional, defaults to 0
+
+      const code = args[0]?.toUpperCase();
+      const duration = args[1];
+      const uses = parseInt(args[2]);
+      const type = args[3]?.toLowerCase() || 'user';
+      const coinAmount = parseInt(args[4]) || 0;
+
+      if (!code || !duration || isNaN(uses) || uses < 1) {
+        return message.reply("❌ Usage: `$generatecode <code> <duration> <uses> [type] [coinAmount]`\nExample: `$generatecode TEST 1h 5 user 100`");
+      }
+
+      if (!['user', 'guild'].includes(type)) {
+        return message.reply("❌ Type must be `user` or `guild`.");
+      }
+
+      const seconds = durationToSeconds(duration);
+      if (seconds === 0 && duration !== "perm") {
+        return message.reply("❌ Invalid duration. Use `1h`, `2d`, `30m`, or `perm`.");
+      }
+
+      // Check if code already exists
+      const existing = await redis.get(`redeem:${code}`);
+      if (existing) {
+        return message.reply(`❌ Code **${code}** already exists.`);
+      }
+
+      // Build data
+      const data = {
+        code,
+        duration,
+        seconds,
+        uses,
+        type,
+        used: 0,
+        createdAt: Date.now(),
+        createdBy: userId,
+        giveCoins: coinAmount > 0,
+        coinAmount,
+        users: []
+      };
+
+      await redis.set(`redeem:${code}`, JSON.stringify(data));
+      await redis.sadd(`redeem:all_codes`, code);
+
+      const embed = new EmbedBuilder()
+        .setColor("#57F287")
+        .setTitle("✅ Code Generated")
+        .setDescription(`Code **${code}** created.`)
+        .addFields(
+          { name: "Type", value: type === 'user' ? '👤 User Premium' : '🏢 Guild Premium', inline: true },
+          { name: "Duration", value: duration, inline: true },
+          { name: "Uses", value: `${uses}`, inline: true },
+          { name: "Coins", value: coinAmount > 0 ? `${coinAmount} coins` : "None", inline: true }
+        )
+        .setTimestamp();
+
+      return message.reply({ embeds: [embed] });
     }
 
     // ---- ECONOMY ----
@@ -254,6 +319,9 @@ module.exports = {
           { name: "🎯 Counting", value: [
             "`$setcountingchannel #channel`",
             "`$resetcounting`"
+          ].join("\n"), inline: false },
+          { name: "🎟️ Redeem Codes", value: [
+            "`$generatecode <code> <duration> <uses> [type] [coinAmount]`"
           ].join("\n"), inline: false }
         )
         .setTimestamp();
