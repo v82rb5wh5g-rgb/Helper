@@ -1,7 +1,7 @@
-// events/messageCreate.js – FULL WITH STATUS CHANNEL AND MAINTENANCE
+// events/messageCreate.js – Helper bot dev commands (prefix $)
 const { Events, EmbedBuilder } = require("discord.js");
 const { devId } = require("../config");
-const { updateStatusChannel } = require("../utils/status");
+const { forceStatusUpdate } = require("../utils/status");
 
 function durationToSeconds(input) {
   if (input === "perm") return -1;
@@ -87,20 +87,20 @@ module.exports = {
     // ---- STATUS CHANNEL ----
     if (cmd === "statuschannel") {
       const action = args[0]?.toLowerCase();
-      const channel = message.mentions.channels.first();
-
       if (action === "setup") {
-        if (!channel) return message.reply("❌ Usage: `$statuschannel setup #channel` (voice or text)");
+        const channel = message.mentions.channels.first();
+        if (!channel) return message.reply("❌ Usage: `$statuschannel setup #channel [baseName]`");
+        const baseName = args.slice(2).join(' ') || "Bot Status";
         await redis.set(`status:channel:${guildId}`, channel.id);
-        await redis.set(`status:baseName:${guildId}`, "Bot Status");
-        await updateStatusChannel(guildId, client, redis);
-        return message.reply(`✅ Status channel set to ${channel}. I'll keep it updated.`);
+        await redis.set(`status:baseName:${guildId}`, baseName);
+        await forceStatusUpdate(guildId, client, redis);
+        return message.reply(`✅ Status channel set to ${channel} with base name "${baseName}".`);
       } else if (action === "remove") {
         await redis.del(`status:channel:${guildId}`);
         await redis.del(`status:baseName:${guildId}`);
         return message.reply("✅ Status channel removed.");
       } else {
-        return message.reply("❌ Usage: `$statuschannel setup #channel` or `$statuschannel remove`");
+        return message.reply("❌ Usage: `$statuschannel setup #channel [baseName]` or `$statuschannel remove`");
       }
     }
 
@@ -110,16 +110,22 @@ module.exports = {
       if (!mode || !["on", "off"].includes(mode)) {
         return message.reply("❌ Usage: `$maintenance on` or `$maintenance off`");
       }
-      const maintenanceKey = `maintenance:${guildId}`;
+      const key = `maintenance:${guildId}`;
       if (mode === "on") {
-        await redis.set(maintenanceKey, "true");
-        await updateStatusChannel(guildId, client, redis);
+        await redis.set(key, "true");
+        await forceStatusUpdate(guildId, client, redis);
         return message.reply("🔧 Maintenance mode **enabled**. The main bot will respond with a maintenance message.");
       } else {
-        await redis.del(maintenanceKey);
-        await updateStatusChannel(guildId, client, redis);
+        await redis.del(key);
+        await forceStatusUpdate(guildId, client, redis);
         return message.reply("✅ Maintenance mode **disabled**. The main bot is back to normal.");
       }
+    }
+
+    // ---- STATUS COMMAND (manual update) ----
+    if (cmd === "status") {
+      await forceStatusUpdate(guildId, client, redis);
+      return message.reply("✅ Status channel updated manually.");
     }
 
     // ---- ECONOMY ----
@@ -248,7 +254,7 @@ module.exports = {
     }
 
     // ---- BLACKLIST ----
-    if (cmd === "devblacklist") {
+    if (cmd === "blacklist" || cmd === "devblacklist") {
       const action = args[0]?.toLowerCase();
       const targetType = args[1]?.toLowerCase();
       const targetId = args[2];
@@ -256,7 +262,7 @@ module.exports = {
       const duration = args.slice(3).find(a => a.match(/^(\d+)(d|h|m)$/)) || "perm";
 
       if (!action || !targetType || !targetId) {
-        return message.reply("❌ Usage: `$devblacklist add user <userId> [reason] [duration]`\n`$devblacklist remove user <userId>`\n`$devblacklist list`");
+        return message.reply("❌ Usage: `$blacklist add user <userId> [reason] [duration]`\n`$blacklist remove user <userId>`\n`$blacklist list`");
       }
 
       if (action === "add") {
@@ -332,9 +338,9 @@ module.exports = {
             "`$removebetatester @user`"
           ].join("\n"), inline: false },
           { name: "🛡️ Blacklist", value: [
-            "`$devblacklist add user <id> [reason] [duration]`",
-            "`$devblacklist remove user <id>`",
-            "`$devblacklist list`"
+            "`$blacklist add user <id> [reason] [duration]`",
+            "`$blacklist remove user <id>`",
+            "`$blacklist list`"
           ].join("\n"), inline: false },
           { name: "🎯 Counting", value: [
             "`$setcountingchannel #channel`",
@@ -344,8 +350,9 @@ module.exports = {
             "`$generatecode <code> <duration> <uses> [type] [coinAmount]`"
           ].join("\n"), inline: false },
           { name: "📊 Status Channel", value: [
-            "`$statuschannel setup #channel`",
-            "`$statuschannel remove`"
+            "`$statuschannel setup #channel [baseName]`",
+            "`$statuschannel remove`",
+            "`$status` (force update)"
           ].join("\n"), inline: false },
           { name: "🔧 Maintenance", value: [
             "`$maintenance on`",
@@ -360,8 +367,8 @@ module.exports = {
     if (cmd === "devv") {
       const sub = args[0];
       if (sub === "xp") {
-        await redis.hSet(`profile:${userId}`, "xp", 0);
-        await redis.hSet(`profile:${userId}`, "level", 3);
+        await redis.hset(`profile:${userId}`, "xp", 0);
+        await redis.hset(`profile:${userId}`, "level", 3);
         return message.reply("XP reset for testing.");
       }
       if (sub === "coins") {
