@@ -1,15 +1,22 @@
 {
-  "name": "daily-drift-helper",
-  "version": "1.0.0",
-  "description": "Helper bot for Daily Drift – dev commands",
+  "name": "mod-bot",
+  "version": "2.0.0",
+  "description": "Our mod bot with casino, tickets, profiles, and more",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "helper": "node helper.js"
   },
   "dependencies": {
-    "discord.js": "^14.14.1",
     "canvas": "^2.11.2",
-    "dotenv": "^16.3.1",
-    "redis": "^4.6.10"
-  }
+    "discord.js": "^14.15.0",
+    "gif-encoder-2": "^1.0.0",
+    "gif-frames": "^1.0.1",
+    "ioredis": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "author": "",
+  "license": "ISC"
 }
