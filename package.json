@@ -8,10 +8,7 @@
     "helper": "node helper.js"
   },
   "dependencies": {
-    "canvas": "^2.11.2",
     "discord.js": "^14.15.0",
-    "gif-encoder-2": "^1.0.0",
-    "gif-frames": "^1.0.1",
     "ioredis": "^5.4.0"
   },
   "engines": {
