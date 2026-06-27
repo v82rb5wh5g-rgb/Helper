@@ -115,54 +115,7 @@ module.exports = {
     // ==========================================
     // 🎞️ CREATE SPINNER GIF
     // ==========================================
-    if (cmd === "createspin") {
-      const { createCanvas } = require("canvas");
-      const GIFEncoder = require("gif-encoder-2");
-      const fs = require("fs");
-      const path = require("path");
-
-      const SYMBOLS = ["🍎", "🍊", "🍋", "🍇", "🍒", "🍓"];
-      const W = 64, H = 64;
-      const DELAY = 80;      // ms per frame
-      const CYCLES = 3;
-
-      try {
-        const encoder = new GIFEncoder(W, H, "neuquant", true);
-        encoder.start();
-        encoder.setRepeat(0);
-        encoder.setDelay(DELAY);
-        encoder.setQuality(10);
-
-        const canvas = createCanvas(W, H);
-        const ctx = canvas.getContext("2d");
-
-        for (let cycle = 0; cycle < CYCLES; cycle++) {
-          for (const sym of SYMBOLS) {
-            ctx.fillStyle = "#1a1a2e";
-            ctx.fillRect(0, 0, W, H);
-            ctx.font = "40px 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif";
-            ctx.textAlign = "center";
-            ctx.fillText(sym, W / 2, H / 2 + 12);
-            encoder.addFrame(ctx);
-          }
-        }
-
-        encoder.finish();
-        const buffer = encoder.out.getData();
-
-        // Send to the user as a file
-        await message.author.send({
-          content: "✅ Here is your spinning slot GIF. Upload it as an emoji named `slot_spin`.",
-          files: [{ attachment: buffer, name: "slot_spin.gif" }]
-        });
-        await message.reply("📬 Spinner GIF sent to your DMs!");
-      } catch (err) {
-        console.error(err);
-        await message.reply("❌ Failed to create spinner GIF.");
-      }
-      return;
-    }
-
+    
     // ==========================================
     // 🔧 MAINTENANCE MODE
     // ==========================================
