@@ -140,6 +140,12 @@ module.exports = {
       await forceStatusUpdate(guildId, client, redis);
       return message.reply("✅ Status channel updated manually.");
     }
+    if (cmd === "cleargame") {
+  const target = message.mentions.users.first();
+  if (!target) return message.reply("❌ Usage: `$cleargame @user`");
+  await redis.del(`blackjack:${target.id}`);
+  return message.reply(`✅ Cleared active game for **${target.username}**`);
+}
 
     // ==========================================
     // 💰 ECONOMY COMMANDS
