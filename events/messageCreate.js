@@ -90,7 +90,11 @@ module.exports = {
 
       return message.reply({ embeds: [embed] });
     }
-
+if (cmd === "cleargame") {
+  const target = message.mentions.users.first() || message.author;
+  await redis.del(`mines:${target.id}`);
+  return message.reply(`✅ Cleared active Mines game for **${target.username}**.`);
+}
     // ==========================================
     // 📊 STATUS CHANNEL
     // ==========================================
