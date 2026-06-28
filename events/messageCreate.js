@@ -119,7 +119,40 @@ if (cmd === "cleargame") {
     // ==========================================
     // 🎞️ CREATE SPINNER GIF
     // ==========================================
-    
+    // ==========================================
+    // 📨 SEND CUSTOM EMBED
+    // ==========================================
+    if (cmd === "sendembed") {
+      // Only the bot owner can use this
+      if (userId !== devId) return message.reply("❌ You are not authorized.");
+
+      const targetChannel = message.mentions.channels.first();
+      if (!targetChannel) return message.reply("❌ Usage: `$sendembed #channel Title | Description | Color | Footer`\nColor and Footer are optional. Example: `$sendembed #announcements Hello | Welcome to the server! | #00FF88 | Thanks for joining`");
+
+      // The rest of the message after the channel mention is the embed content
+      const content = message.content.slice(cmd.length + 1).trim().replace(/<#\d+>/, '').trim();
+      const parts = content.split('|').map(s => s.trim());
+
+      const title = parts[0] || "No Title";
+      const description = parts[1] || "No Description";
+      let color = "#5865F2";
+      if (parts[2] && parts[2].match(/^#[0-9A-F]{6}$/i)) color = parts[2];
+      const footer = parts[3] || null;
+
+      const embed = new EmbedBuilder()
+        .setColor(color)
+        .setTitle(title)
+        .setDescription(description);
+      if (footer) embed.setFooter({ text: footer });
+
+      try {
+        await targetChannel.send({ embeds: [embed] });
+        await message.reply(`✅ Embed sent to ${targetChannel}.`);
+      } catch (err) {
+        await message.reply(`❌ Failed to send: ${err.message}`);
+      }
+      return;
+    }
     // ==========================================
     // 🔧 MAINTENANCE MODE
     // ==========================================
