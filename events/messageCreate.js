@@ -1,4 +1,4 @@
-// events/messageCreate.js – Helper Bot (Full, Corrected + Debt)
+// events/messageCreate.js – Helper Bot (Full, no incrby, no decrby, debt allowed)
 const { Events, EmbedBuilder } = require("discord.js");
 const { devId } = require("../config");
 const { forceStatusUpdate } = require("../utils/status");
@@ -38,6 +38,7 @@ module.exports = {
     // 🎟️ GENERATE CODE
     // ==========================================
     if (cmd === "generatecode") {
+      // ... (unchanged, kept as in your previous full file)
       const code = args[0]?.toUpperCase();
       const duration = args[1];
       const uses = parseInt(args[2]);
@@ -105,6 +106,7 @@ module.exports = {
     // 📊 STATUS CHANNEL
     // ==========================================
     if (cmd === "statuschannel") {
+      // ... (unchanged)
       const action = args[0]?.toLowerCase();
       if (action === "setup") {
         const channel = message.mentions.channels.first();
@@ -127,6 +129,7 @@ module.exports = {
     // 📨 SEND CUSTOM EMBED
     // ==========================================
     if (cmd === "sendembed") {
+      // ... (unchanged)
       const targetChannel = message.mentions.channels.first();
       if (!targetChannel) return message.reply("❌ Usage: `$sendembed #channel Title | Description | Color | Footer`\nExample: `$sendembed #announcements Hello | Welcome to the server! | #00FF88 | Thanks for joining`");
 
@@ -158,6 +161,7 @@ module.exports = {
     // 🔧 MAINTENANCE MODE
     // ==========================================
     if (cmd === "maintenance") {
+      // ... (unchanged)
       const mode = args[0]?.toLowerCase();
       if (!mode || !["on", "off"].includes(mode)) {
         return message.reply("❌ Usage: `$maintenance on` or `$maintenance off`");
@@ -183,15 +187,17 @@ module.exports = {
     }
 
     // ==========================================
-    // 💰 ECONOMY COMMANDS
+    // 💰 ECONOMY COMMANDS (manual arithmetic, no incrby/decrby)
     // ==========================================
     if (cmd === "addcoins") {
       const target = message.mentions.users.first();
       const amount = parseInt(args[1]);
       if (!target || isNaN(amount) || amount < 1)
         return message.reply("❌ Usage: `$addcoins @user amount`");
-      await redis.incrby(`eco:${target.id}:money`, amount);
-      const bal = await redis.get(`eco:${target.id}:money`) || 0;
+      const key = `eco:${target.id}:money`;
+      const current = Number(await redis.get(key) || 0);
+      await redis.set(key, current + amount);
+      const bal = await redis.get(key) || 0;
       return message.reply(`✅ Added **${amount}** coins to **${target.username}**. New balance: **${bal}**`);
     }
 
@@ -201,13 +207,15 @@ module.exports = {
       if (!target || isNaN(amount) || amount < 1)
         return message.reply("❌ Usage: `$removecoins @user amount`");
 
-      await redis.incrby(`eco:${target.id}:money`, -amount);
-      const bal = Number(await redis.get(`eco:${target.id}:money`) || 0);
+      const key = `eco:${target.id}:money`;
+      const current = Number(await redis.get(key) || 0);
+      const newBal = current - amount;
+      await redis.set(key, newBal);
 
-      if (bal < 0) {
-        return message.reply(`💸 Removed **${amount}** coins from **${target.username}**. They now owe **${Math.abs(bal)}** coins (in debt).`);
+      if (newBal < 0) {
+        return message.reply(`💸 Removed **${amount}** coins from **${target.username}**. They now owe **${Math.abs(newBal)}** coins (in debt).`);
       } else {
-        return message.reply(`✅ Removed **${amount}** coins from **${target.username}**. New balance: **${bal}**`);
+        return message.reply(`✅ Removed **${amount}** coins from **${target.username}**. New balance: **${newBal}**`);
       }
     }
 
@@ -221,15 +229,17 @@ module.exports = {
     }
 
     // ==========================================
-    // 🛡️ SHIELDS
+    // 🛡️ SHIELDS (manual arithmetic)
     // ==========================================
     if (cmd === "addshields") {
       const target = message.mentions.users.first();
       const amount = parseInt(args[1]);
       if (!target || isNaN(amount) || amount < 1)
         return message.reply("❌ Usage: `$addshields @user amount`");
-      await redis.incrby(`eco:${target.id}:shield`, amount);
-      const shields = await redis.get(`eco:${target.id}:shield`) || 0;
+      const key = `eco:${target.id}:shield`;
+      const current = Number(await redis.get(key) || 0);
+      await redis.set(key, current + amount);
+      const shields = await redis.get(key) || 0;
       return message.reply(`✅ Added **${amount}** shields. Total: **${shields}**`);
     }
 
@@ -238,10 +248,11 @@ module.exports = {
       const amount = parseInt(args[1]);
       if (!target || isNaN(amount) || amount < 1)
         return message.reply("❌ Usage: `$removeshields @user amount`");
-      const current = Number(await redis.get(`eco:${target.id}:shield`) || 0);
+      const key = `eco:${target.id}:shield`;
+      const current = Number(await redis.get(key) || 0);
       if (current < amount) return message.reply(`❌ ${target.username} only has ${current} shields.`);
-      await redis.incrby(`eco:${target.id}:shield`, -amount);   // ✅ negative incrby
-      const shields = await redis.get(`eco:${target.id}:shield`) || 0;
+      await redis.set(key, current - amount);
+      const shields = await redis.get(key) || 0;
       return message.reply(`✅ Removed **${amount}** shields. Remaining: **${shields}**`);
     }
 
@@ -323,6 +334,7 @@ module.exports = {
     // 🛡️ BLACKLIST MANAGEMENT
     // ==========================================
     if (cmd === "blacklist" || cmd === "devblacklist") {
+      // ... (unchanged)
       const action = args[0]?.toLowerCase();
       const targetType = args[1]?.toLowerCase();
       const targetId = args[2];
