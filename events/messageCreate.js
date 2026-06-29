@@ -1,4 +1,4 @@
-// events/messageCreate.js – Helper Bot (Full)
+// events/messageCreate.js – Helper Bot (Full, Corrected)
 const { Events, EmbedBuilder } = require("discord.js");
 const { devId } = require("../config");
 const { forceStatusUpdate } = require("../utils/status");
@@ -55,7 +55,6 @@ module.exports = {
         return message.reply("❌ Invalid duration. Use `1h`, `2d`, `30m`, or `perm`.");
       }
 
-      // Check if code already exists
       const existing = await redis.get(`redeem:${code}`);
       if (existing) return message.reply(`❌ Code **${code}** already exists.`);
 
@@ -90,11 +89,18 @@ module.exports = {
 
       return message.reply({ embeds: [embed] });
     }
-if (cmd === "cleargame") {
-  const target = message.mentions.users.first() || message.author;
-  await redis.del(`mines:${target.id}`);
-  return message.reply(`✅ Cleared active Mines game for **${target.username}**.`);
-}
+
+    // ==========================================
+    // 🧹 CLEAR STUCK GAMES (mines + blackjack)
+    // ==========================================
+    if (cmd === "cleargame") {
+      const target = message.mentions.users.first();
+      if (!target) return message.reply("❌ Usage: `$cleargame @user`");
+      await redis.del(`mines:${target.id}`);
+      await redis.del(`blackjack:${target.id}`);
+      return message.reply(`✅ Cleared active games for **${target.username}**.`);
+    }
+
     // ==========================================
     // 📊 STATUS CHANNEL
     // ==========================================
@@ -116,20 +122,14 @@ if (cmd === "cleargame") {
         return message.reply("❌ Usage: `$statuschannel setup #channel [baseName]` or `$statuschannel remove`");
       }
     }
-    // ==========================================
-    // 🎞️ CREATE SPINNER GIF
-    // ==========================================
+
     // ==========================================
     // 📨 SEND CUSTOM EMBED
     // ==========================================
     if (cmd === "sendembed") {
-      // Only the bot owner can use this
-      if (userId !== devId) return message.reply("❌ You are not authorized.");
-
       const targetChannel = message.mentions.channels.first();
-      if (!targetChannel) return message.reply("❌ Usage: `$sendembed #channel Title | Description | Color | Footer`\nColor and Footer are optional. Example: `$sendembed #announcements Hello | Welcome to the server! | #00FF88 | Thanks for joining`");
+      if (!targetChannel) return message.reply("❌ Usage: `$sendembed #channel Title | Description | Color | Footer`\nExample: `$sendembed #announcements Hello | Welcome to the server! | #00FF88 | Thanks for joining`");
 
-      // The rest of the message after the channel mention is the embed content
       const content = message.content.slice(cmd.length + 1).trim().replace(/<#\d+>/, '').trim();
       const parts = content.split('|').map(s => s.trim());
 
@@ -153,6 +153,7 @@ if (cmd === "cleargame") {
       }
       return;
     }
+
     // ==========================================
     // 🔧 MAINTENANCE MODE
     // ==========================================
@@ -165,11 +166,11 @@ if (cmd === "cleargame") {
       if (mode === "on") {
         await redis.set(key, "true");
         await forceStatusUpdate(guildId, client, redis);
-        return message.reply("🔧 Maintenance mode **enabled**. The main bot will respond with a maintenance message.");
+        return message.reply("🔧 Maintenance mode **enabled**.");
       } else {
         await redis.del(key);
         await forceStatusUpdate(guildId, client, redis);
-        return message.reply("✅ Maintenance mode **disabled**. The main bot is back to normal.");
+        return message.reply("✅ Maintenance mode **disabled**.");
       }
     }
 
@@ -180,12 +181,6 @@ if (cmd === "cleargame") {
       await forceStatusUpdate(guildId, client, redis);
       return message.reply("✅ Status channel updated manually.");
     }
-    if (cmd === "cleargame") {
-  const target = message.mentions.users.first();
-  if (!target) return message.reply("❌ Usage: `$cleargame @user`");
-  await redis.del(`blackjack:${target.id}`);
-  return message.reply(`✅ Cleared active game for **${target.username}**`);
-}
 
     // ==========================================
     // 💰 ECONOMY COMMANDS
@@ -207,7 +202,7 @@ if (cmd === "cleargame") {
         return message.reply("❌ Usage: `$removecoins @user amount`");
       const current = Number(await redis.get(`eco:${target.id}:money`) || 0);
       if (current < amount) return message.reply(`❌ ${target.username} only has ${current} coins.`);
-      await redis.decrby(`eco:${target.id}:money`, amount);
+      await redis.incrby(`eco:${target.id}:money`, -amount);   // ✅ negative incrby = decrby
       const bal = await redis.get(`eco:${target.id}:money`) || 0;
       return message.reply(`✅ Removed **${amount}** coins. New balance: **${bal}**`);
     }
@@ -241,7 +236,7 @@ if (cmd === "cleargame") {
         return message.reply("❌ Usage: `$removeshields @user amount`");
       const current = Number(await redis.get(`eco:${target.id}:shield`) || 0);
       if (current < amount) return message.reply(`❌ ${target.username} only has ${current} shields.`);
-      await redis.decrby(`eco:${target.id}:shield`, amount);
+      await redis.incrby(`eco:${target.id}:shield`, -amount);   // ✅ negative incrby
       const shields = await redis.get(`eco:${target.id}:shield`) || 0;
       return message.reply(`✅ Removed **${amount}** shields. Remaining: **${shields}**`);
     }
