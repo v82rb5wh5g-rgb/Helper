@@ -1,4 +1,4 @@
-// events/messageCreate.js – Helper Bot (Full, Corrected)
+// events/messageCreate.js – Helper Bot (Full, Corrected + Debt)
 const { Events, EmbedBuilder } = require("discord.js");
 const { devId } = require("../config");
 const { forceStatusUpdate } = require("../utils/status");
@@ -200,11 +200,15 @@ module.exports = {
       const amount = parseInt(args[1]);
       if (!target || isNaN(amount) || amount < 1)
         return message.reply("❌ Usage: `$removecoins @user amount`");
-      const current = Number(await redis.get(`eco:${target.id}:money`) || 0);
-      if (current < amount) return message.reply(`❌ ${target.username} only has ${current} coins.`);
-      await redis.incrby(`eco:${target.id}:money`, -amount);   // ✅ negative incrby = decrby
-      const bal = await redis.get(`eco:${target.id}:money`) || 0;
-      return message.reply(`✅ Removed **${amount}** coins. New balance: **${bal}**`);
+
+      await redis.incrby(`eco:${target.id}:money`, -amount);
+      const bal = Number(await redis.get(`eco:${target.id}:money`) || 0);
+
+      if (bal < 0) {
+        return message.reply(`💸 Removed **${amount}** coins from **${target.username}**. They now owe **${Math.abs(bal)}** coins (in debt).`);
+      } else {
+        return message.reply(`✅ Removed **${amount}** coins from **${target.username}**. New balance: **${bal}**`);
+      }
     }
 
     if (cmd === "setbalance") {
