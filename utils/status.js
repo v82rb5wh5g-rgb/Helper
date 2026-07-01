@@ -1,10 +1,10 @@
-// utils/status.js – Redis-based status updater (with robust logging)
+// utils/status.js – MongoDB-based status updater
 const { EmbedBuilder } = require("discord.js");
 
-async function updateStatusChannel(guildId, client, redis) {
+async function updateStatusChannel(guildId, client, db) {
   try {
     console.log(`[Status] Updating guild ${guildId}...`);
-    const channelId = await redis.get(`status:channel:${guildId}`);
+    const channelId = await db.get(`status:channel:${guildId}`);
     if (!channelId) {
       console.log(`[Status] No channel set for ${guildId}`);
       return;
@@ -12,24 +12,24 @@ async function updateStatusChannel(guildId, client, redis) {
 
     const guild = client.guilds.cache.get(guildId);
     if (!guild) {
-      await redis.del(`status:channel:${guildId}`);
-      await redis.del(`status:baseName:${guildId}`);
+      await db.del(`status:channel:${guildId}`);
+      await db.del(`status:baseName:${guildId}`);
       console.log(`[Status] Guild ${guildId} not found, cleaned up.`);
       return;
     }
 
     const channel = guild.channels.cache.get(channelId);
     if (!channel) {
-      await redis.del(`status:channel:${guildId}`);
-      await redis.del(`status:baseName:${guildId}`);
+      await db.del(`status:channel:${guildId}`);
+      await db.del(`status:baseName:${guildId}`);
       console.log(`[Status] Channel ${channelId} not found, cleaned up.`);
       return;
     }
 
-    const maintenance = await redis.get(`maintenance:${guildId}`);
+    const maintenance = await db.get(`maintenance:${guildId}`);
     const isMaintenance = maintenance === "true";
 
-    const heartbeat = await redis.get('bot:heartbeat');
+    const heartbeat = await db.get('bot:heartbeat');
     const isOnline = heartbeat && (Date.now() - Number(heartbeat) < 120000);
 
     let statusText, statusColor;
@@ -44,7 +44,7 @@ async function updateStatusChannel(guildId, client, redis) {
       statusColor = "#ED4245";
     }
 
-    const baseName = await redis.get(`status:baseName:${guildId}`) || "Bot Status";
+    const baseName = await db.get(`status:baseName:${guildId}`) || "Bot Status";
 
     if (channel.type === 2) { // Voice channel
       const newName = `${baseName} • ${statusText}`;
@@ -76,25 +76,24 @@ async function updateStatusChannel(guildId, client, redis) {
   }
 }
 
-function startStatusUpdater(client, redis) {
-  // Run immediately once
+function startStatusUpdater(client, db) {
   console.log('[Status] Starting updater...');
   setInterval(async () => {
     try {
-      const keys = await redis.keys('status:channel:*');
+      const keys = await db.keys('status:channel:*');
       console.log(`[Status] Found ${keys.length} status channels.`);
       for (const key of keys) {
         const guildId = key.split(':')[2];
-        await updateStatusChannel(guildId, client, redis);
+        await updateStatusChannel(guildId, client, db);
       }
     } catch (error) {
       console.error('[Status] Updater error:', error);
     }
-  }, 30000); // every 30 seconds
+  }, 30000);
 }
 
-async function forceStatusUpdate(guildId, client, redis) {
-  await updateStatusChannel(guildId, client, redis);
+async function forceStatusUpdate(guildId, client, db) {
+  await updateStatusChannel(guildId, client, db);
 }
 
 module.exports = { updateStatusChannel, startStatusUpdater, forceStatusUpdate };
