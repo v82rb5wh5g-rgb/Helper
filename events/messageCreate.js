@@ -1,4 +1,4 @@
-// events/messageCreate.js – Helper Bot (Full, no incrby, no decrby, debt allowed)
+// events/messageCreate.js – Helper Bot (MongoDB version)
 const { Events, EmbedBuilder } = require("discord.js");
 const { devId } = require("../config");
 const { forceStatusUpdate } = require("../utils/status");
@@ -19,7 +19,8 @@ function durationToSeconds(input) {
 module.exports = {
   name: Events.MessageCreate,
 
-  async execute(message, client, redis) {
+  // ✅ Updated parameter: db instead of redis
+  async execute(message, client, db) {
     // ---- Basic checks ----
     if (message.author.bot || !message.guild) return;
     if (!message.content.startsWith("$")) return;
@@ -38,7 +39,6 @@ module.exports = {
     // 🎟️ GENERATE CODE
     // ==========================================
     if (cmd === "generatecode") {
-      // ... (unchanged, kept as in your previous full file)
       const code = args[0]?.toUpperCase();
       const duration = args[1];
       const uses = parseInt(args[2]);
@@ -56,7 +56,8 @@ module.exports = {
         return message.reply("❌ Invalid duration. Use `1h`, `2d`, `30m`, or `perm`.");
       }
 
-      const existing = await redis.get(`redeem:${code}`);
+      // ✅ Redis → db
+      const existing = await db.get(`redeem:${code}`);
       if (existing) return message.reply(`❌ Code **${code}** already exists.`);
 
       const data = {
@@ -73,8 +74,8 @@ module.exports = {
         users: []
       };
 
-      await redis.set(`redeem:${code}`, JSON.stringify(data));
-      await redis.sadd(`redeem:all_codes`, code);
+      await db.set(`redeem:${code}`, JSON.stringify(data));
+      await db.sadd(`redeem:all_codes`, code);
 
       const embed = new EmbedBuilder()
         .setColor("#57F287")
@@ -92,13 +93,13 @@ module.exports = {
     }
 
     // ==========================================
-    // 🧹 CLEAR STUCK GAMES (mines + blackjack)
+    // 🧹 CLEAR STUCK GAMES
     // ==========================================
     if (cmd === "cleargame") {
       const target = message.mentions.users.first();
       if (!target) return message.reply("❌ Usage: `$cleargame @user`");
-      await redis.del(`mines:${target.id}`);
-      await redis.del(`blackjack:${target.id}`);
+      await db.del(`mines:${target.id}`);
+      await db.del(`blackjack:${target.id}`);
       return message.reply(`✅ Cleared active games for **${target.username}**.`);
     }
 
@@ -106,19 +107,18 @@ module.exports = {
     // 📊 STATUS CHANNEL
     // ==========================================
     if (cmd === "statuschannel") {
-      // ... (unchanged)
       const action = args[0]?.toLowerCase();
       if (action === "setup") {
         const channel = message.mentions.channels.first();
         if (!channel) return message.reply("❌ Usage: `$statuschannel setup #channel [baseName]`");
         const baseName = args.slice(2).join(' ') || "Bot Status";
-        await redis.set(`status:channel:${guildId}`, channel.id);
-        await redis.set(`status:baseName:${guildId}`, baseName);
-        await forceStatusUpdate(guildId, client, redis);
+        await db.set(`status:channel:${guildId}`, channel.id);
+        await db.set(`status:baseName:${guildId}`, baseName);
+        await forceStatusUpdate(guildId, client, db);
         return message.reply(`✅ Status channel set to ${channel} with base name "${baseName}".`);
       } else if (action === "remove") {
-        await redis.del(`status:channel:${guildId}`);
-        await redis.del(`status:baseName:${guildId}`);
+        await db.del(`status:channel:${guildId}`);
+        await db.del(`status:baseName:${guildId}`);
         return message.reply("✅ Status channel removed.");
       } else {
         return message.reply("❌ Usage: `$statuschannel setup #channel [baseName]` or `$statuschannel remove`");
@@ -129,7 +129,6 @@ module.exports = {
     // 📨 SEND CUSTOM EMBED
     // ==========================================
     if (cmd === "sendembed") {
-      // ... (unchanged)
       const targetChannel = message.mentions.channels.first();
       if (!targetChannel) return message.reply("❌ Usage: `$sendembed #channel Title | Description | Color | Footer`\nExample: `$sendembed #announcements Hello | Welcome to the server! | #00FF88 | Thanks for joining`");
 
@@ -161,19 +160,18 @@ module.exports = {
     // 🔧 MAINTENANCE MODE
     // ==========================================
     if (cmd === "maintenance") {
-      // ... (unchanged)
       const mode = args[0]?.toLowerCase();
       if (!mode || !["on", "off"].includes(mode)) {
         return message.reply("❌ Usage: `$maintenance on` or `$maintenance off`");
       }
       const key = `maintenance:${guildId}`;
       if (mode === "on") {
-        await redis.set(key, "true");
-        await forceStatusUpdate(guildId, client, redis);
+        await db.set(key, "true");
+        await forceStatusUpdate(guildId, client, db);
         return message.reply("🔧 Maintenance mode **enabled**.");
       } else {
-        await redis.del(key);
-        await forceStatusUpdate(guildId, client, redis);
+        await db.del(key);
+        await forceStatusUpdate(guildId, client, db);
         return message.reply("✅ Maintenance mode **disabled**.");
       }
     }
@@ -182,12 +180,12 @@ module.exports = {
     // 🟢 STATUS (force update)
     // ==========================================
     if (cmd === "status") {
-      await forceStatusUpdate(guildId, client, redis);
+      await forceStatusUpdate(guildId, client, db);
       return message.reply("✅ Status channel updated manually.");
     }
 
     // ==========================================
-    // 💰 ECONOMY COMMANDS (manual arithmetic, no incrby/decrby)
+    // 💰 ECONOMY COMMANDS
     // ==========================================
     if (cmd === "addcoins") {
       const target = message.mentions.users.first();
@@ -195,9 +193,9 @@ module.exports = {
       if (!target || isNaN(amount) || amount < 1)
         return message.reply("❌ Usage: `$addcoins @user amount`");
       const key = `eco:${target.id}:money`;
-      const current = Number(await redis.get(key) || 0);
-      await redis.set(key, current + amount);
-      const bal = await redis.get(key) || 0;
+      const current = Number(await db.get(key) || 0);
+      await db.set(key, current + amount);
+      const bal = await db.get(key) || 0;
       return message.reply(`✅ Added **${amount}** coins to **${target.username}**. New balance: **${bal}**`);
     }
 
@@ -208,9 +206,9 @@ module.exports = {
         return message.reply("❌ Usage: `$removecoins @user amount`");
 
       const key = `eco:${target.id}:money`;
-      const current = Number(await redis.get(key) || 0);
+      const current = Number(await db.get(key) || 0);
       const newBal = current - amount;
-      await redis.set(key, newBal);
+      await db.set(key, newBal);
 
       if (newBal < 0) {
         return message.reply(`💸 Removed **${amount}** coins from **${target.username}**. They now owe **${Math.abs(newBal)}** coins (in debt).`);
@@ -224,12 +222,12 @@ module.exports = {
       const amount = parseInt(args[1]);
       if (!target || isNaN(amount) || amount < 0)
         return message.reply("❌ Usage: `$setbalance @user amount`");
-      await redis.set(`eco:${target.id}:money`, amount);
+      await db.set(`eco:${target.id}:money`, amount);
       return message.reply(`✅ Set **${target.username}**'s balance to **${amount}** coins`);
     }
 
     // ==========================================
-    // 🛡️ SHIELDS (manual arithmetic)
+    // 🛡️ SHIELDS
     // ==========================================
     if (cmd === "addshields") {
       const target = message.mentions.users.first();
@@ -237,9 +235,9 @@ module.exports = {
       if (!target || isNaN(amount) || amount < 1)
         return message.reply("❌ Usage: `$addshields @user amount`");
       const key = `eco:${target.id}:shield`;
-      const current = Number(await redis.get(key) || 0);
-      await redis.set(key, current + amount);
-      const shields = await redis.get(key) || 0;
+      const current = Number(await db.get(key) || 0);
+      await db.set(key, current + amount);
+      const shields = await db.get(key) || 0;
       return message.reply(`✅ Added **${amount}** shields. Total: **${shields}**`);
     }
 
@@ -249,10 +247,10 @@ module.exports = {
       if (!target || isNaN(amount) || amount < 1)
         return message.reply("❌ Usage: `$removeshields @user amount`");
       const key = `eco:${target.id}:shield`;
-      const current = Number(await redis.get(key) || 0);
+      const current = Number(await db.get(key) || 0);
       if (current < amount) return message.reply(`❌ ${target.username} only has ${current} shields.`);
-      await redis.set(key, current - amount);
-      const shields = await redis.get(key) || 0;
+      await db.set(key, current - amount);
+      const shields = await db.get(key) || 0;
       return message.reply(`✅ Removed **${amount}** shields. Remaining: **${shields}**`);
     }
 
@@ -262,23 +260,23 @@ module.exports = {
     if (cmd === "removepremium") {
       const target = message.mentions.users.first();
       if (!target) return message.reply("❌ Usage: `$removepremium @user`");
-      await redis.del(`premium:user:${target.id}`);
-      await redis.del(`eco:${target.id}:vip`);
+      await db.del(`premium:user:${target.id}`);
+      await db.del(`eco:${target.id}:vip`);
       return message.reply(`✅ Removed user premium from **${target.username}**`);
     }
 
     if (cmd === "removeguildpremium") {
-      await redis.del(`premium:guild:${guildId}`);
+      await db.del(`premium:guild:${guildId}`);
       return message.reply(`✅ Removed guild premium for this server.`);
     }
 
     if (cmd === "checkpremium") {
       const userKey = `premium:user:${userId}`;
       const guildKey = `premium:guild:${guildId}`;
-      const userVal = await redis.get(userKey);
-      const userTTL = await redis.ttl(userKey);
-      const guildVal = await redis.get(guildKey);
-      const guildTTL = await redis.ttl(guildKey);
+      const userVal = await db.get(userKey);
+      const userTTL = await db.ttl(userKey);
+      const guildVal = await db.get(guildKey);
+      const guildTTL = await db.ttl(guildKey);
       return message.reply(
         `👤 **User Premium**\nValue: ${userVal || '❌ none'}\nTTL: ${userTTL}s\n\n` +
         `🏢 **Guild Premium**\nValue: ${guildVal || '❌ none'}\nTTL: ${guildTTL}s`
@@ -291,10 +289,10 @@ module.exports = {
       if (seconds === 0 && duration !== "perm") return message.reply("Invalid duration.");
       const key = `premium:user:${userId}`;
       if (duration === "perm") {
-        await redis.set(key, "perm");
+        await db.set(key, "perm");
       } else {
-        await redis.set(key, "active");
-        await redis.expire(key, seconds);
+        await db.set(key, "active");
+        await db.expire(key, seconds);
       }
       return message.reply(`✅ User premium set for you (${duration}). Check /premium.`);
     }
@@ -305,10 +303,10 @@ module.exports = {
       if (seconds === 0 && duration !== "perm") return message.reply("Invalid duration.");
       const key = `premium:guild:${guildId}`;
       if (duration === "perm") {
-        await redis.set(key, "perm");
+        await db.set(key, "perm");
       } else {
-        await redis.set(key, "active");
-        await redis.expire(key, seconds);
+        await db.set(key, "active");
+        await db.expire(key, seconds);
       }
       return message.reply(`✅ Guild premium set for this server (${duration}).`);
     }
@@ -319,14 +317,14 @@ module.exports = {
     if (cmd === "addbetatester") {
       const target = message.mentions.users.first();
       if (!target) return message.reply("❌ Usage: `$addbetatester @user`");
-      await redis.set(`beta:user:${target.id}`, "true");
+      await db.set(`beta:user:${target.id}`, "true");
       return message.reply(`✅ **${target.username}** is now a Beta Tester.`);
     }
 
     if (cmd === "removebetatester") {
       const target = message.mentions.users.first();
       if (!target) return message.reply("❌ Usage: `$removebetatester @user`");
-      await redis.del(`beta:user:${target.id}`);
+      await db.del(`beta:user:${target.id}`);
       return message.reply(`✅ Removed Beta Tester status from **${target.username}**.`);
     }
 
@@ -334,7 +332,6 @@ module.exports = {
     // 🛡️ BLACKLIST MANAGEMENT
     // ==========================================
     if (cmd === "blacklist" || cmd === "devblacklist") {
-      // ... (unchanged)
       const action = args[0]?.toLowerCase();
       const targetType = args[1]?.toLowerCase();
       const targetId = args[2];
@@ -368,9 +365,9 @@ module.exports = {
         if (seconds !== -1) {
           data.expiresAt = Date.now() + seconds * 1000;
         }
-        await redis.set(key, JSON.stringify(data));
+        await db.set(key, JSON.stringify(data));
         if (seconds !== -1) {
-          await redis.expire(key, seconds);
+          await db.expire(key, seconds);
         }
         return message.reply(
           `✅ Blacklisted **${targetType}** \`${targetId}\` until ${duration}.\n` +
@@ -378,16 +375,16 @@ module.exports = {
         );
       } else if (action === "remove") {
         const key = `blacklist:${targetType}:${targetId}`;
-        const exists = await redis.get(key);
+        const exists = await db.get(key);
         if (!exists) return message.reply(`❌ No blacklist entry found for ${targetType} ${targetId}.`);
-        await redis.del(key);
+        await db.del(key);
         return message.reply(`✅ Removed blacklist for **${targetType}** \`${targetId}\`.`);
       } else if (action === "list") {
-        const keys = await redis.keys(`blacklist:*`);
+        const keys = await db.keys(`blacklist:*`);
         if (keys.length === 0) return message.reply("📭 No blacklisted entries.");
         const list = [];
         for (const key of keys) {
-          const raw = await redis.get(key);
+          const raw = await db.get(key);
           const data = JSON.parse(raw);
           const parts = key.split(':');
           const type = parts[1];
@@ -407,15 +404,15 @@ module.exports = {
     if (cmd === "setcountingchannel") {
       const channel = message.mentions.channels.first();
       if (!channel) return message.reply("❌ Usage: `$setcountingchannel #channel`");
-      await redis.set(`counting:${guildId}:channel`, channel.id);
-      await redis.set(`counting:${guildId}:number`, 0);
+      await db.set(`counting:${guildId}:channel`, channel.id);
+      await db.set(`counting:${guildId}:number`, 0);
       return message.reply(`✅ Counting channel set to ${channel}`);
     }
 
     if (cmd === "resetcounting") {
-      const keys = await redis.keys(`counting:${guildId}:*`);
-      for (const key of keys) await redis.del(key);
-      await redis.set(`counting:${guildId}:number`, 0);
+      const keys = await db.keys(`counting:${guildId}:*`);
+      for (const key of keys) await db.del(key);
+      await db.set(`counting:${guildId}:number`, 0);
       return message.reply("✅ All counting stats reset.");
     }
 
@@ -480,12 +477,12 @@ module.exports = {
     if (cmd === "devv") {
       const sub = args[0];
       if (sub === "xp") {
-        await redis.hset(`profile:${userId}`, "xp", 0);
-        await redis.hset(`profile:${userId}`, "level", 3);
+        await db.hset(`profile:${userId}`, "xp", 0);
+        await db.hset(`profile:${userId}`, "level", 3);
         return message.reply("XP reset for testing.");
       }
       if (sub === "coins") {
-        await redis.set(`eco:${userId}:money`, 10000);
+        await db.set(`eco:${userId}:money`, 10000);
         return message.reply("Coins set to 10,000.");
       }
       return message.reply("Usage: $devv xp | coins");
@@ -495,7 +492,7 @@ module.exports = {
     // 🩺 HEARTBEAT DEBUG
     // ==========================================
     if (cmd === "heartbeat") {
-      const heartbeat = await redis.get('bot:heartbeat');
+      const heartbeat = await db.get('bot:heartbeat');
       if (!heartbeat) return message.reply("❌ No heartbeat found.");
       const age = Date.now() - Number(heartbeat);
       const status = age < 120000 ? "🟢 Online" : "🔴 Offline";
